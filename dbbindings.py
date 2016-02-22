@@ -14,8 +14,8 @@ def headers(method):
         print "Content-type: text/html\n"
 
     elif method=="return_tsv":
-        print "Content-type: text; charset=utf-8"
-        print "Content-Disposition: filename=Bookworm-data.txt"
+        print "Content-type: text/csv; charset=utf-8"
+        print "Content-disposition: attachment; filename=/var/www/html/download/bookworm-data.txt"
         print "Pragma: no-cache"
         print "Expires: 0\n"
 
@@ -47,9 +47,14 @@ def main(JSONinput):
 
     result, matches = p.execute()
 
+    if query['method'] == 'return_tsv':
+        import csv
+        with open('/var/www/html/download/bookworm-data.txt', 'w') as tsvfile:
+            for row in result:
+                tsvfile.write(row)
+
     if len(matches) > 0:
-	matches = matches[0]
-	matches = map(str, matches)
+    	matches = map(str, matches[0])
 
     print result, matches
 
