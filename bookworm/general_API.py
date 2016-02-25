@@ -3,6 +3,7 @@
 import MySQLdb
 from pandas import merge
 from pandas.io.sql import read_sql
+from pandas.io.json import json_normalize
 from pandas import set_option
 from SQLAPI import *
 from copy import deepcopy
@@ -17,7 +18,7 @@ def find_my_cnf():
     """
     The password will be looked for in these places.
     """
-    
+
     for file in ["etc/bookworm/my.cnf","/etc/my.cnf","/etc/mysql/my.cnf","/root/.my.cnf"]:
         if os.path.exists(file):
             return file
@@ -47,7 +48,7 @@ def calculateAggregates(df,parameters):
     basic things like frequency, all the way up to TF-IDF.
     """
     parameters = set(parameters)
-    
+
     if "WordsPerMillion" in parameters:
         df["WordsPerMillion"] = df["WordCount_x"].multiply(1000000)/df["WordCount_y"]
     if "WordCount" in parameters:
@@ -97,19 +98,19 @@ def calculateAggregates(df,parameters):
         diff2 = log(df[b].divide(E2))
         df[destination] = 2*(df[a].multiply(diff1) + df[b].multiply(diff2))
         # A hack, but a useful one: encode the direction of the significance,
-        # in the sign, so negative 
+        # in the sign, so negative
         difference = diff1<diff2
         df.ix[difference,destination] = -1*df.ix[difference,destination]
         return df[destination]
 
     if "Dunning" in parameters:
         df["Dunning"] = DunningLog(df,"WordCount_x","WordCount_y")
-        
+
     if "DunningTexts" in parameters:
         df["DunningTexts"] = DunningLog(df,"TextCount_x","TextCount_y")
 
     return df
-    
+
 def intersectingNames(p1,p2,full=False):
     """
     The list of intersection column names between two DataFrame objects.
@@ -129,7 +130,7 @@ def base_count_types(list_of_final_count_types):
     the final count types are calculated from some base types across both
     the local query and the superquery.
     """
-    
+
     output = set()
 
     for count_name in list_of_final_count_types:
@@ -140,8 +141,8 @@ def base_count_types(list_of_final_count_types):
         if count_name in ["TextLength","HitsPerMatch","TFIDF"]:
             output.add("TextCount")
             output.add("WordCount")
-        
-            
+
+
     return list(output)
 
 def is_a_wordcount_field(string):
@@ -151,9 +152,9 @@ def is_a_wordcount_field(string):
 
 class APIcall(object):
     """
-    This is the base class from which more specific classes for actual 
+    This is the base class from which more specific classes for actual
     methods can be dispatched.
-    
+
     Without a "return_pandas_frame" method, it won't run.
     """
     def __init__(self,APIcall):
@@ -172,7 +173,7 @@ class APIcall(object):
             #Hack: change somehow. You can't group on "word", just on "unigram"
             query["search_limits"]["word"] = query["search_limits"]["unigram"]
             del query["search_limits"]["unigram"]
-            
+
     def idiot_proof_arrays(self):
         for element in ['counttype','groups']:
             try:
@@ -184,7 +185,7 @@ class APIcall(object):
 
     def get_compare_limits(self):
         """
-        The compare limits will try to 
+        The compare limits will try to
         first be the string specified:
         if not that, then drop every term that begins with an asterisk:
         if not that, then drop the words term;
@@ -204,34 +205,33 @@ class APIcall(object):
                 del search_limits[limit]
                 del compare_limits[limit]
                 asterisked = True
-        
+
         if asterisked:
             return compare_limits
 
         #Next, try deleting the word term.
-            
+
         for word_term in search_limits.keys():
             if word_term in ['word','unigram','bigram', 'trigram', 'four_gram', 'five_gram', 'six_gram']:
                 del compare_limits[word_term]
 
         #Finally, whether it's deleted a word term or not, return it all.
         return compare_limits
-        
+
     def data(self):
         if hasattr(self,"pandas_frame"):
             return self.pandas_frame
         else:
-	    df, matches = self.get_data_from_source()
+    	    df, matches = self.get_data_from_source()
             self.pandas_frame = df
             return self.pandas_frame, matches
-        
+
     def get_data_from_source(self):
 
         """
-        This is a 
-
-        Note that this method could be easily adapted to run on top of a Solr instance or
-        something else, just by changing the bits in the middle where it handles storage_format.
+        Note that this method could be easily adapted to run on top of a Solr
+        instance or something else, just by changing the bits in the middle
+        where it handles storage_format.
         """
 
         call1 = deepcopy(self.query)
@@ -261,15 +261,15 @@ class APIcall(object):
 
         """
         This could use any method other than pandas_SQL:
-        You'd just need to name objects df1 and df2 as pandas dataframes 
+        You'd just need to name objects df1 and df2 as pandas dataframes
         """
         df1,match1 = self.generate_pandas_frame(call1)
         df2,match2 = self.generate_pandas_frame(call2)
-         
+
         intersections = intersectingNames(df1,df2)
         fullLabels = intersectingNames(df1,df2,full=True)
-       
-	match = list(set(match1 + match2)) 
+
+    	match = list(set(match1 + match2))
 
         """
         Would this merge be faster with indexes?
@@ -283,13 +283,13 @@ class APIcall(object):
             df1['dummy_merge_variable'] = 1
             df2['dummy_merge_variable'] = 1
             merged = merge(df1,df2,on=["dummy_merge_variable"],how='outer')
-            
+
         merged = merged.fillna(int(0))
-        
+
         calculations = self.query['counttype']
-    
+
         calcced = calculateAggregates(merged,calculations)
-        
+
         calcced = calcced.fillna(int(0))
 
         final_DataFrame = calcced[self.query['groups'] + self.query['counttype']]
@@ -299,14 +299,14 @@ class APIcall(object):
     def execute(self):
         method = self.query['method']
 
-        
+
         if isinstance(self.query['search_limits'],list):
             if self.query['method'] not in ["json","return_json"]:
                 self.query['search_limits'] = self.query['search_limits'][0]
             else:
-		data, matches = self.multi_execute()
+    		data, matches = self.multi_execute()
                 return data, matches
-        
+
         if method=="return_json" or method=="json":
             frame, matches = self.data()
             return self.return_json(), matches
@@ -357,7 +357,7 @@ class APIcall(object):
                 return int(input)
             else:
                 return input
-        
+
         #Define a recursive structure to hold the stuff.
         def tree():
             return defaultdict(tree)
@@ -402,20 +402,20 @@ class SQLAPIcall(APIcall):
     But that API call is more limited than the general API; you only need to support "WordCount" and "TextCount"
     methods.
     """
-    
+
     def generate_pandas_frame(self,call):
         """
 
         This is good example of the query that actually fetches the results.
         It creates some SQL, runs it, and returns it as a pandas DataFrame.
-        
+
         The actual SQL production is handled by the userquery class, which uses more
         legacy code.
 
         """
         con=dbConnect(prefs,self.query['database'])
         q, matches = userquery(call).query()
-	self.matches = matches
+    	self.matches = matches
         if self.query['method']=="debug":
             print q
         df = read_sql(q, con.db)

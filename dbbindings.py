@@ -5,19 +5,20 @@
 from datetime import datetime
 from bookworm.general_API import *
 import os
+import csv
 import cgitb
 #import MySQLdb
 cgitb.enable()
 
 def headers(method):
-    if method!="return_tsv":
-        print "Content-type: text/html\n"
-
-    elif method=="return_tsv":
+    if method=="return_tsv":
         print "Content-type: text/csv; charset=utf-8"
         print "Content-disposition: attachment; filename=/var/www/html/download/bookworm-data.txt"
         print "Pragma: no-cache"
         print "Expires: 0\n"
+
+    else:
+        print "Content-type: text/html\n"
 
 def debug(string):
     """
@@ -46,12 +47,6 @@ def main(JSONinput):
     p = SQLAPIcall(query)
 
     result, matches = p.execute()
-
-    if query['method'] == 'return_tsv':
-        import csv
-        with open('/var/www/html/download/bookworm-data.txt', 'w') as tsvfile:
-            for row in result:
-                tsvfile.write(row)
 
     if len(matches) > 0:
     	matches = map(str, matches[0])
